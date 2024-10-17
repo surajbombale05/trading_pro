@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from sklearn.metrics import mean_squared_error
 import time
+import datetime
 # from google.colab import drive
 
 import gym
@@ -38,7 +39,7 @@ def load_csv_files(folder_path):
         dataframes = list(executor.map(pd.read_csv, csv_files))
     # dataframes = [pd.read_csv(csv_file) for csv_file in csv_files]
     return dataframes
-data_dir = os.path.abspath('C:\\Users\\Baap\\Desktop\\trading bot\\trading_bot\\data')
+data_dir = os.path.abspath('C:\\Users\\suraj\\Desktop\\trading_pro\\data')
 min1_data = load_csv_files(os.path.join(data_dir, '1min'))
 min15_data = load_csv_files(os.path.join(data_dir, '15min'))
 min3_data = load_csv_files(os.path.join(data_dir, '5min'))
@@ -152,7 +153,22 @@ def ema_trend_bot(df, short_window=50, long_window=200):
     df.loc[df['Short_EMA'] < df['Long_EMA'], 'Signal'] = -1
 
     recent_signal = df['Signal'].iloc[-1]
-    send_email(recent_signal)
+     # Example values for Buy/Sell Prices and Times
+    buy_price = df['Close'].iloc[-1] if recent_signal == 1 else None
+    sell_price = df['Close'].iloc[-1] if recent_signal == -1 else None
+    buy_time = datetime.datetime.now() if recent_signal == 1 else None
+    sell_time = datetime.datetime.now() if recent_signal == -1 else None
+    accuracy = 0.85  # Placeholder for accuracy, replace with actual accuracy calculation
+    bot_name = 'EMA_Trend_Bot'
+ # Send email with dynamic values
+    send_email(currency_pair='EUR/USD', 
+               buy_price=buy_price, 
+               sell_price=sell_price, 
+               buy_time=buy_time, 
+               sell_time=sell_time, 
+               accuracy=accuracy, 
+               bot_name=bot_name, 
+               prediction=recent_signal)
 
     print("EMA Trend Bot signals:")
     print(df[['Short_EMA', 'Long_EMA', 'Signal']].tail())
@@ -178,7 +194,7 @@ def train_model_parallel(df):
     dl_model.train(x=['Open', 'High', 'Low', 'Volume'], y='Close', training_frame=h2o_df)
 
     # Save the model
-    model_path = h2o.save_model(model=dl_model, path='data/models', force=True)
+    model_path = h2o.save_model(model=dl_model, path='C:\\Users\\suraj\\Desktop\\trading_pro\\data\\models', force=True)
     print(f"Model saved at: {model_path}")
     return model_path
 
@@ -251,6 +267,23 @@ def ichimoku_trend_bot(df):
     df['Ichimoku_Signal'] = 0
     df.loc[df['Close'] > df['Senkou_Span_A'], 'Ichimoku_Signal'] = 1  # Buy signal
     df.loc[df['Close'] < df['Senkou_Span_B'], 'Ichimoku_Signal'] = -1  # Sell signal
+
+    recent_signal = df['Ichimoku_Signal'].iloc[-1]
+    buy_price = df['Close'].iloc[-1] if recent_signal == 1 else None
+    sell_price = df['Close'].iloc[-1] if recent_signal == -1 else None
+    buy_time = datetime.datetime.now() if recent_signal == 1 else None
+    sell_time = datetime.datetime.now() if recent_signal == -1 else None
+    accuracy = 0.90  # Replace with actual accuracy logic
+    bot_name = 'Ichimoku_Trend_Bot'
+
+    send_email(currency_pair='EUR/USD', 
+               buy_price=buy_price, 
+               sell_price=sell_price, 
+               buy_time=buy_time, 
+               sell_time=sell_time, 
+               accuracy=accuracy, 
+               bot_name=bot_name, 
+               prediction=recent_signal)
 
     print("Ichimoku Trend Bot signals:")
     print(df[['Tenkan_Sen', 'Kijun_Sen', 'Senkou_Span_A', 'Senkou_Span_B', 'Chikou_Span', 'Ichimoku_Signal']].tail())
