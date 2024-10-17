@@ -29,7 +29,7 @@ import smtplib
 from dotenv import load_dotenv
 
 # Initialize H2O cluster
-h2o.init(max_mem_size="4G")
+h2o.init()
 load_dotenv()
 
 # Load CSV files from a folder
@@ -159,20 +159,8 @@ def ema_trend_bot(df, short_window=50, long_window=200, look_back=5):
     sell_time = datetime.datetime.now() if recent_signal == -1 else None
     accuracy = accuracyema  # Placeholder for accuracy, replace with actual accuracy calculation
     bot_name = 'EMA_Trend_Bot'
-#  # Send email with dynamic values
-#     send_email(currency_pair='EUR/USD', 
-#                buy_price=buy_price, 
-#                sell_price=sell_price, 
-#                buy_time=buy_time, 
-#                sell_time=sell_time, 
-#                accuracy=accuracy, 
-#                bot_name=bot_name, 
-#                prediction=recent_signal)
 
-    # print("EMA Trend Bot signals:")
-    # print(df[['Short_EMA', 'Long_EMA', 'Signal']].tail())
-
-    return {'bot_name': 'EMA_Trend_Bot', 'prediction': recent_signal, 'buy_price': buy_price,
+    return {'bot_name': bot_name, 'prediction': recent_signal, 'buy_price': buy_price,
             'sell_price': sell_price, 'buy_time': buy_time, 'sell_time': sell_time, 'accuracy': accuracy}
 
 def generate_trades():
@@ -215,9 +203,16 @@ scheduler.add_job(run_combined_strategy, 'interval', minutes=5)
 scheduler.start()
 
 def train_model_parallel(df):
-    df = ema_trend_bot(df)
+    trade_info = ema_trend_bot(df)
     h2o_df = h2o.H2OFrame(df)
-    dl_model = H2ODeepLearningEstimator()
+    dl_model = H2ODeepLearningEstimator(
+        distribution="AUTO",
+        activation="Rectifier",
+        hidden=[200, 200],
+        epochs=10,
+        train_samples_per_iteration=500,
+        seed=1234
+    )
 
     dl_model.train(x=['Open', 'High', 'Low', 'Volume'], y='Close', training_frame=h2o_df)
 
