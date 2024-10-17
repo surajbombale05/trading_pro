@@ -28,7 +28,7 @@ from email.mime.multipart import MIMEMultipart
 import smtplib
 from dotenv import load_dotenv
 
-# Initialize H2O cluster
+# Initialize H2O clustersss
 h2o.init(max_mem_size="4G")
 load_dotenv()
 
