@@ -39,7 +39,7 @@ def load_csv_files(folder_path):
         dataframes = list(executor.map(pd.read_csv, csv_files))
     # dataframes = [pd.read_csv(csv_file) for csv_file in csv_files]
     return dataframes
-data_dir = os.path.abspath('C:\\Users\\Baap\\Desktop\\trading bot\\trading_bot\\data')
+data_dir = os.path.abspath('./data')
 min1_data = load_csv_files(os.path.join(data_dir, '1min'))
 min15_data = load_csv_files(os.path.join(data_dir, '15min'))
 min3_data = load_csv_files(os.path.join(data_dir, '5min'))
@@ -59,10 +59,18 @@ db = client['demo']
 collection = db['sample']
 
 # Store results in MongoDB
-def store_results_in_db(strategy, profit, trades, accuracy):
-    results = {'strategy': strategy, 'profit': profit, 'trades': trades , 'accuracy':accuracy}
+def store_results_in_db(bot_name, prediction, buy_price, sell_price, buy_time, sell_time, accuracy):
+    results = {
+        'bot_name': bot_name,
+        'prediction': prediction,
+        'buy_price': buy_price,
+        'sell_price': sell_price,
+        'buy_time': buy_time,
+        'sell_time': sell_time,
+        'accuracy': accuracy
+    }
     collection.insert_one(results)
-    print(f"Stored in DB: Strategy: {strategy}, Profit: {profit}, Trades: {trades}, accuracy: {accuracy}")
+    print(f"Stored in DB: {results}")
 
 def fetch_live_data(currency_pair='EUR/USD'):
     c = CurrencyRates()
@@ -80,23 +88,21 @@ def combine_live_and_historical(live_rate, historical_data):
     combined_data['Close'] = combined_data['Live_Rate'].combine_first(combined_data['Close'])
     return combined_data
 
-def send_email(currency_pair, buy_price, sell_price, buy_time, sell_time, accuracy, bot_name, prediction):
+def send_email(trades):
     email_user = 'sagarkhemnar143@gmail.com'
     email_password = 'vbuh wjod dlcg wsag'  # Use your app-specific password
     email_send = 'coderd60@gmail.com'
 
-    subject = f'Trade Signal for {currency_pair} - {bot_name} Bot'
-    body = f"""
-    Trade Signal for {currency_pair}:\n
-    - **Bot Name**: {bot_name}
-    - **Prediction**: {'Buy' if prediction == 1 else 'Hold'}
-    - **Buy Price**: {buy_price}
-    - **Sell Price**: {sell_price}
-    - **Buy Time**: {buy_time}
-    - **Sell Time**: {sell_time}
-    - **Accuracy**: {accuracy * 100:.2f}%\n
-    Please review the trade signal.
-    """
+    subject = 'Top 3 Trades Report'
+    body = "Top 3 trades by accuracy:\n\n"
+    for trade in trades:
+        body += (f"Bot Name: {trade['bot_name']}\n"
+                 f"Prediction: {'Buy' if trade['prediction'] == 1 else 'Hold'}\n"
+                 f"Buy Price: {trade['buy_price']}\n"
+                 f"Sell Price: {trade['sell_price']}\n"
+                 f"Buy Time: {trade['buy_time']}\n"
+                 f"Sell Time: {trade['sell_time']}\n"
+                 f"Accuracy: {trade['accuracy'] * 100:.2f}%\n\n")
 
     msg = MIMEMultipart()
     msg['From'] = email_user
@@ -123,29 +129,58 @@ def ema_trend_bot(df, short_window=50, long_window=200):
     df['Signal'] = 0
     df.loc[df['Short_EMA'] > df['Long_EMA'], 'Signal'] = 1
     df.loc[df['Short_EMA'] < df['Long_EMA'], 'Signal'] = -1
+    
+   
 
     recent_signal = df['Signal'].iloc[-1]
      # Example values for Buy/Sell Prices and Times
     buy_price = df['Close'].iloc[-1] if recent_signal == 1 else None
     sell_price = df['Close'].iloc[-1] if recent_signal == -1 else None
+    accuracyema = df['Accuracy'] = df['Signal'].shift(1) == df['Signal']
     buy_time = datetime.datetime.now() if recent_signal == 1 else None
     sell_time = datetime.datetime.now() if recent_signal == -1 else None
-    accuracy = 0.85  # Placeholder for accuracy, replace with actual accuracy calculation
+    accuracy = accuracyema  # Placeholder for accuracy, replace with actual accuracy calculation
     bot_name = 'EMA_Trend_Bot'
- # Send email with dynamic values
-    send_email(currency_pair='EUR/USD', 
-               buy_price=buy_price, 
-               sell_price=sell_price, 
-               buy_time=buy_time, 
-               sell_time=sell_time, 
-               accuracy=accuracy, 
-               bot_name=bot_name, 
-               prediction=recent_signal)
+#  # Send email with dynamic values
+#     send_email(currency_pair='EUR/USD', 
+#                buy_price=buy_price, 
+#                sell_price=sell_price, 
+#                buy_time=buy_time, 
+#                sell_time=sell_time, 
+#                accuracy=accuracy, 
+#                bot_name=bot_name, 
+#                prediction=recent_signal)
 
-    print("EMA Trend Bot signals:")
-    print(df[['Short_EMA', 'Long_EMA', 'Signal']].tail())
+    # print("EMA Trend Bot signals:")
+    # print(df[['Short_EMA', 'Long_EMA', 'Signal']].tail())
 
-    return df
+    return {'bot_name': 'EMA_Trend_Bot', 'prediction': recent_signal, 'buy_price': buy_price,
+            'sell_price': sell_price, 'buy_time': buy_time, 'sell_time': sell_time, 'accuracy': accuracy}
+
+def generate_trades():
+    live_rate = fetch_live_data()
+    trades = []
+
+    for interval, dfs in all_data.items():
+        for df in dfs:
+            combined_df = combine_live_and_historical(live_rate, df)
+            trade = ema_trend_bot(combined_df)
+            trades.append(trade)
+            store_results_in_db(**trade)
+
+    # Sort trades by accuracy and take the top 3
+    top_trades = sorted(trades, key=lambda x: x['accuracy'], reverse=True)[:3]
+    return top_trades
+
+def run_trade_and_email():
+    trades = generate_trades()
+    send_email(trades)
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(run_trade_and_email, 'interval', minutes=30)
+scheduler.start()
+
+print("Trading bot running...")
 
 # Scheduler to run the combined strategy every 30 minutes
 def run_combined_strategy():
@@ -166,7 +201,7 @@ def train_model_parallel(df):
     dl_model.train(x=['Open', 'High', 'Low', 'Volume'], y='Close', training_frame=h2o_df)
 
     # Save the model
-    model_path = h2o.save_model(model=dl_model, path='C:\\Users\\Baap\\Desktop\\trading bot\\trading_bot\\data\\models', force=True)
+    model_path = h2o.save_model(model=dl_model, path='./data/models', force=True)
     print(f"Model saved at: {model_path}")
     return model_path
 
@@ -234,6 +269,7 @@ def ichimoku_trend_bot(df):
     df['Senkou_Span_A'] = ((df['Tenkan_Sen'] + df['Kijun_Sen']) / 2).shift(26)
     df['Senkou_Span_B'] = ((df['High'].rolling(window=52).max() + df['Low'].rolling(window=52).min()) / 2).shift(26)
     df['Chikou_Span'] = df['Close'].shift(-26)
+    accuracyimo = (df['Close'] > df['Senkou_Span_A']).sum() / len(df)
 
     # Generate trading signals based on Ichimoku cloud
     df['Ichimoku_Signal'] = 0
@@ -245,20 +281,20 @@ def ichimoku_trend_bot(df):
     sell_price = df['Close'].iloc[-1] if recent_signal == -1 else None
     buy_time = datetime.datetime.now() if recent_signal == 1 else None
     sell_time = datetime.datetime.now() if recent_signal == -1 else None
-    accuracy = 0.90  # Replace with actual accuracy logic
+    accuracy = accuracyimo  # Replace with actual accuracy logic
     bot_name = 'Ichimoku_Trend_Bot'
 
-    send_email(currency_pair='EUR/USD', 
-               buy_price=buy_price, 
-               sell_price=sell_price, 
-               buy_time=buy_time, 
-               sell_time=sell_time, 
-               accuracy=accuracy, 
-               bot_name=bot_name, 
-               prediction=recent_signal)
+    # send_email(currency_pair='EUR/USD', 
+    #            buy_price=buy_price, 
+    #            sell_price=sell_price, 
+    #            buy_time=buy_time, 
+    #            sell_time=sell_time, 
+    #            accuracy=accuracy, 
+    #            bot_name=bot_name, 
+    #            prediction=recent_signal)
 
-    print("Ichimoku Trend Bot signals:")
-    print(df[['Tenkan_Sen', 'Kijun_Sen', 'Senkou_Span_A', 'Senkou_Span_B', 'Chikou_Span', 'Ichimoku_Signal']].tail())
+    # print("Ichimoku Trend Bot signals:")
+    # print(df[['Tenkan_Sen', 'Kijun_Sen', 'Senkou_Span_A', 'Senkou_Span_B', 'Chikou_Span', 'Ichimoku_Signal']].tail())
 
     return df
 
@@ -269,6 +305,15 @@ def range_breakout_bot(df, lookback=20):
     df['Signal'] = 0
     df.loc[df['Close'] > df['Range_High'], 'Signal'] = 1  # Buy signal
     df.loc[df['Close'] < df['Range_Low'], 'Signal'] = -1  # Sell signal
+    accuracyrange = (df['Signal'] == df['Signal'].shift(1)).mean()  # Calculate accuracy
+    recent_signal = df['Signal'].iloc[-1]
+    buy_price = df['Close'].iloc[-1] if recent_signal == 1 else None
+    sell_price = df['Close'].iloc[-1] if recent_signal == -1 else None
+    buy_time = datetime.datetime.now() if recent_signal == 1 else None
+    sell_time = datetime.datetime.now() if recent_signal == -1 else None
+    accuracy = accuracyrange  # Replace with actual accuracy logic
+    bot_name = 'Range_Breakout_Bot'
+
 
     print("Range Breakout Bot signals:")
     print(df[['Range_High', 'Range_Low', 'Signal']].tail())
@@ -324,6 +369,7 @@ def execute_trading_strategies(data_dict):
             ema_trend_bot(df)
             ichimoku_trend_bot(df)
             trend_analysis(df)
+            
 
 # Run strategy execution in the background every minute
 scheduler = BackgroundScheduler()
@@ -338,6 +384,7 @@ def combined_strategy_bot(df):
     df = add_technical_indicators(df)
     df = ichimoku_trend_bot(df)
     df = range_breakout_bot(df)
+
 
     print("Combined Strategy signals:")
     print(df[['Signal']].tail())
