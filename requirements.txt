@@ -1,4 +1,4 @@
-pandas==1.4.3
+pandas
 numpy
 h2o
 pymongo
@@ -13,6 +13,9 @@ shap
 gym
 pyspellchecker
 email-validator
-
-
-#pip install -r requirements.txt
+gym
+stable_baselines3
+textblob
+hmmlearn
+python-dotenv
+forex_python

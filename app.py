@@ -13,8 +13,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from sklearn.metrics import mean_squared_error
 import time
 import datetime
-# from google.colab import drive
-
 import gym
 from gym import spaces
 from stable_baselines3 import PPO
@@ -28,9 +26,11 @@ from forex_python.converter import CurrencyRates
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import smtplib
+from dotenv import load_dotenv
 
 # Initialize H2O cluster
 h2o.init(max_mem_size="4G")
+load_dotenv()
 
 # Load CSV files from a folder
 def load_csv_files(folder_path):
@@ -39,7 +39,7 @@ def load_csv_files(folder_path):
         dataframes = list(executor.map(pd.read_csv, csv_files))
     # dataframes = [pd.read_csv(csv_file) for csv_file in csv_files]
     return dataframes
-data_dir = os.path.abspath('C:\\Users\\Baap\\Desktop\\trading bot\\trading_bot\\data')
+data_dir = './data'
 min1_data = load_csv_files(os.path.join(data_dir, '1min'))
 min15_data = load_csv_files(os.path.join(data_dir, '15min'))
 min3_data = load_csv_files(os.path.join(data_dir, '5min'))
@@ -81,10 +81,19 @@ def combine_live_and_historical(live_rate, historical_data):
     return combined_data
 
 def send_email(currency_pair, buy_price, sell_price, buy_time, sell_time, accuracy, bot_name, prediction):
-    email_user = 'sagarkhemnar143@gmail.com'
-    email_password = 'vbuh wjod dlcg wsag'  # Use your app-specific password
-    email_send = 'coderd60@gmail.com'
-
+    email_user = os.getenv('EMAIL_USER')
+    email_password = os.getenv('EMAIL_PASSWORD')
+    sender_email = os.getenv('SENDER_EMAIL')
+    
+    print(email_user)
+    print(email_password)
+    print(sender_email)
+    
+    # Check if email credentials and sender email are provided
+    if not email_user or not email_password or not sender_email:
+        print("Error: Missing email credentials or sender email.")
+        return
+    
     subject = f'Trade Signal for {currency_pair} - {bot_name} Bot'
     body = f"""
     Trade Signal for {currency_pair}:\n
@@ -100,7 +109,7 @@ def send_email(currency_pair, buy_price, sell_price, buy_time, sell_time, accura
 
     msg = MIMEMultipart()
     msg['From'] = email_user
-    msg['To'] = email_send
+    msg['To'] = sender_email
     msg['Subject'] = subject
     msg.attach(MIMEText(body, 'plain'))
 
@@ -109,14 +118,14 @@ def send_email(currency_pair, buy_price, sell_price, buy_time, sell_time, accura
         server.starttls()  # Secure the connection
         server.login(email_user, email_password)
         text = msg.as_string()
-        server.sendmail(email_user, email_send, text)
+        server.sendmail(email_user, sender_email, text)
         server.quit()
         print(f"Email sent successfully with subject: {subject}")
     except Exception as e:
         print(f"Error sending email: {e}")
 
-# Exponential Moving Average (EMA) trend bot
-def ema_trend_bot(df, short_window=50, long_window=200):
+
+def ema_trend_bot(df, short_window=50, long_window=200, look_back=5):
     df['Short_EMA'] = df['Close'].ewm(span=short_window, adjust=False).mean()
     df['Long_EMA'] = df['Close'].ewm(span=long_window, adjust=False).mean()
 
@@ -125,27 +134,41 @@ def ema_trend_bot(df, short_window=50, long_window=200):
     df.loc[df['Short_EMA'] < df['Long_EMA'], 'Signal'] = -1
 
     recent_signal = df['Signal'].iloc[-1]
-     # Example values for Buy/Sell Prices and Times
+
+    # Calculate accuracy based on past `look_back` signals
+    if len(df) > look_back:
+        recent_signals = df['Signal'].iloc[-look_back:]
+        recent_prices = df['Close'].iloc[-look_back:]
+        correct_predictions = 0
+
+        # Compare the signals with actual price movement
+        for i in range(1, len(recent_signals)):
+            if recent_signals.iloc[i] == 1 and recent_prices.iloc[i] > recent_prices.iloc[i - 1]:
+                correct_predictions += 1
+            elif recent_signals.iloc[i] == -1 and recent_prices.iloc[i] < recent_prices.iloc[i - 1]:
+                correct_predictions += 1
+
+        accuracy = round(correct_predictions / (look_back - 1) * 100, 2) if look_back > 1 else 100
+    else:
+        accuracy = 100  # If there are not enough past signals, default to 100% accuracy
+
+    # Prepare dynamic values for email
     buy_price = df['Close'].iloc[-1] if recent_signal == 1 else None
     sell_price = df['Close'].iloc[-1] if recent_signal == -1 else None
-    buy_time = datetime.datetime.now() if recent_signal == 1 else None
-    sell_time = datetime.datetime.now() if recent_signal == -1 else None
-    accuracy = 0.85  # Placeholder for accuracy, replace with actual accuracy calculation
-    bot_name = 'EMA_Trend_Bot'
- # Send email with dynamic values
-    send_email(currency_pair='EUR/USD', 
-               buy_price=buy_price, 
-               sell_price=sell_price, 
-               buy_time=buy_time, 
-               sell_time=sell_time, 
-               accuracy=accuracy, 
-               bot_name=bot_name, 
-               prediction=recent_signal)
+    buy_time = df.index[-1] if buy_price else None
+    sell_time = df.index[-1] if sell_price else None
+
+    currency_pair = os.getenv('CURRENCY_PAIR')
+
+    if recent_signal != 0:
+        send_email(currency_pair, buy_price, sell_price, buy_time, sell_time, accuracy, bot_name='EMA Bot', prediction=recent_signal)
 
     print("EMA Trend Bot signals:")
     print(df[['Short_EMA', 'Long_EMA', 'Signal']].tail())
+    print(f"Calculated accuracy: {accuracy}%")
 
     return df
+
 
 # Scheduler to run the combined strategy every 30 minutes
 def run_combined_strategy():
@@ -154,8 +177,10 @@ def run_combined_strategy():
         combined_df = combine_live_and_historical(live_rate, df)
         ema_trend_bot(combined_df)
 
+
+shedule_time = os.getenv('CURRENCY_PAIR')
 scheduler = BackgroundScheduler()
-scheduler.add_job(run_combined_strategy, 'interval', minutes=30)
+scheduler.add_job(run_combined_strategy, 'interval', minutes=5)
 scheduler.start()
 
 def train_model_parallel(df):
@@ -166,7 +191,7 @@ def train_model_parallel(df):
     dl_model.train(x=['Open', 'High', 'Low', 'Volume'], y='Close', training_frame=h2o_df)
 
     # Save the model
-    model_path = h2o.save_model(model=dl_model, path='C:\\Users\\Baap\\Desktop\\trading bot\\trading_bot\\data\\models', force=True)
+    model_path = h2o.save_model(model=dl_model, path='./models', force=True)
     print(f"Model saved at: {model_path}")
     return model_path
 
@@ -245,7 +270,7 @@ def ichimoku_trend_bot(df):
     sell_price = df['Close'].iloc[-1] if recent_signal == -1 else None
     buy_time = datetime.datetime.now() if recent_signal == 1 else None
     sell_time = datetime.datetime.now() if recent_signal == -1 else None
-    accuracy = 0.90  # Replace with actual accuracy logic
+    accuracy = 0.90 
     bot_name = 'Ichimoku_Trend_Bot'
 
     send_email(currency_pair='EUR/USD', 
