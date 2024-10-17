@@ -106,7 +106,7 @@ def send_email(trades):
 
     msg = MIMEMultipart()
     msg['From'] = email_user
-    msg['To'] = sender_email
+    msg['To'] = email_send
     msg['Subject'] = subject
     msg.attach(MIMEText(body, 'plain'))
 
@@ -115,7 +115,7 @@ def send_email(trades):
         server.starttls()  # Secure the connection
         server.login(email_user, email_password)
         text = msg.as_string()
-        server.sendmail(email_user, sender_email, text)
+        server.sendmail(email_user, email_send, text)
         server.quit()
         print(f"Email sent successfully with subject: {subject}")
     except Exception as e:
