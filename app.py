@@ -11,7 +11,7 @@ import time
 import matplotlib.pyplot as plt
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from sklearn.metrics import mean_squared_error
-import datetime as datetime
+import datetime
 import gym
 from gym import spaces
 from stable_baselines3 import PPO
@@ -27,7 +27,7 @@ from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
 import requests
 import csv
-
+from datetime import datetime
 # Initialize H2O cluster
 h2o.init()
 load_dotenv()
@@ -54,7 +54,7 @@ print("First 5 rows of 1-min data:")
 print(min1_data[0].head())
 
 # MongoDB setup
-client = MongoClient('mongodb+srv://aimlvideos7:$xZj8T$SQc2.a88@testdata.loqpv.mongodb.net/')
+client = MongoClient('mongodb://aimlvideos7:%24xZj8T%24SQc2.a88@testdata.loqpv.mongodb.net/testdata')
 db = client['demo']
 collection = db['sample']
 
@@ -268,7 +268,7 @@ scheduler.add_job(run_combined_strategy, 'interval', minutes=5)
 scheduler.start()
 
 def train_model_parallel(df):
-    trade_info = ema_trend_bot(df)
+    # trade_info = ema_trend_bot(df)
     h2o_df = h2o.H2OFrame(df)
     dl_model = H2ODeepLearningEstimator(
         distribution="AUTO",
