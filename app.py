@@ -218,8 +218,8 @@ def ema_trend_bot(df, short_window=50, long_window=200, look_back=5):
     buy_price = df['Close'].iloc[-1] if recent_signal == 1 else None
     sell_price = df['Close'].iloc[-1] if recent_signal == -1 else None
     accuracyema = df['Accuracy'] = df['Signal'].shift(1) == df['Signal']
-    buy_time = datetime.datetime.now() if recent_signal == 1 else None
-    sell_time = datetime.datetime.now() if recent_signal == -1 else None
+    buy_time = datetime.now() if recent_signal == 1 else None
+    sell_time = datetime.now() if recent_signal == -1 else None
     accuracy = accuracyema  # Placeholder for accuracy, replace with actual accuracy calculation
     bot_name = 'EMA_Trend_Bot'
 
@@ -360,8 +360,8 @@ def ichimoku_trend_bot(df):
     recent_signal = df['Ichimoku_Signal'].iloc[-1]
     buy_price = df['Close'].iloc[-1] if recent_signal == 1 else None
     sell_price = df['Close'].iloc[-1] if recent_signal == -1 else None
-    buy_time = datetime.datetime.now() if recent_signal == 1 else None
-    sell_time = datetime.datetime.now() if recent_signal == -1 else None
+    buy_time = datetime.now() if recent_signal == 1 else None
+    sell_time = datetime.now() if recent_signal == -1 else None
     accuracy = accuracyimo  # Replace with actual accuracy logic
     bot_name = 'Ichimoku_Trend_Bot'
 
